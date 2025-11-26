@@ -1,148 +1,232 @@
-% --- Bisection Method ---
-% Define the function
-f = @(x) x^3 - 2*x - 5;
+clc;
+clear all;
 
-% Define the interval and tolerance
-a = 2;
-b = 3;
-tol = 1e-6;
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% --- 1. NEWTON DIVIDED DIFFERENCE INTERPOLATION ---
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-% Loop until the interval is small enough
-while (b - a) / 2 > tol
-    c = (a + b) / 2;
-    if f(c) == 0
-        break;
-    elseif f(a) * f(c) < 0
-        b = c;
-    else
-        a = c;
+% Given data points
+x = [0 0.25 0.5 0.75];
+y = [1 1.64872 2.71828 4.4816];
+
+% Point where we want to interpolate
+p = 0.43;
+
+% Number of data points
+n = length(x);
+
+% Create the divided difference table (n x n)
+F = zeros(n,n);
+
+% First column = f(x)
+for i = 1:n
+    F(i,1) = y(i);
+end
+
+% Fill the divided difference table
+for j = 2:n
+    for i = 1:n-j+1
+        F(i,j) = (F(i+1,j-1) - F(i,j-1)) / (x(i+j-1) - x(i));
     end
 end
 
-root = (a + b) / 2;
-fprintf('Bisection Method: The root is approximately %.6f\n', root);
+% Evaluate Newton polynomial at p
+P = F(1,1);   % Start with first term
+prod = 1;
 
-
-
-% --- Fixed-Point Method ---
-% Define the function g(x)
-g = @(x) (2*x + 5)^(1/3);
-
-% Define the initial guess and tolerance
-x0 = 2;
-tol = 1e-6;
-max_iter = 100;
-x_old = x0;
-
-% Loop for a set number of iterations
-for i = 1:max_iter
-    x_new = g(x_old);
-    if abs(x_new - x_old) < tol
-        break;
-    end
-    x_old = x_new;
+for k = 2:n
+    prod = prod * (p - x(k-1));
+    P = P + F(1,k) * prod;
 end
 
-root = x_new;
-fprintf('Fixed-Point Method: The root is approximately %.6f\n', root);
+fprintf('\nNewton Interpolation: f(0.43) = %.6f\n', P);
 
 
 
-% --- Newton-Raphson Method ---
-% Define the function and its derivative
-f = @(x) x^2 - 4;
-f_prime = @(x) 2*x;
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% --- 2. GAUSS ELIMINATION (SIMPLE, NO PIVOTING) ---
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-% Define the initial guess and tolerance
-x0 = 1.5;
-tol = 1e-6;
-max_iter = 100;
-x_old = x0;
+% Augmented matrix [A|b]
+a = [10 8 -3 1 16;
+     2 10 1 -4 9;
+     3 -4 10 1 10;
+     2 2 -3 10 11];
 
-% Loop for a set number of iterations
-for i = 1:max_iter
-    x_new = x_old - f(x_old) / f_prime(x_old);
-    if abs(x_new - x_old) < tol
-        break;
+n = size(a,1);
+
+% Forward elimination
+for j = 1:n-1
+    % eliminate entries below the pivot
+    for i = j+1:n
+        m = a(i,j) / a(j,j);        % multiplier
+        a(i,:) = a(i,:) - m * a(j,:);
     end
-    x_old = x_new;
 end
 
-root = x_new;
-fprintf('Newton-Raphson Method: The root is approximately %.6f\n', root);
+% Back substitution
+x = zeros(n,1);
+x(n) = a(n,n+1) / a(n,n);
+
+for i = n-1:-1:1
+    s = 0;
+    for j = i+1:n
+        s = s + a(i,j) * x(j);
+    end
+    x(i) = (a(i,n+1) - s) / a(i,i);
+end
+
+fprintf('\nGauss Elimination Solution:\n');
+disp(x);
 
 
 
-% --- Lagrange Interpolation ---
-% Define data points
-x = [0, 1, 2];
-y = [1, 3, 2];
-x_new = 1.5;
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% --- 3. GAUSS–SEIDEL METHOD ---
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% Coefficient matrix A and RHS vector b
+A = [10 8 -3 1;
+     2 10 1 -4;
+     3 -4 10 1;
+     2 2 -3 10];
+
+b = [16; 9; 10; 11];
+
+% Initial guess
+xg = [0;0;0;0];
+n = length(b);
+tol = 1e-5;
+
+% Iterate
+for k = 1:1000
+    x_old = xg;
+    
+    for i = 1:n
+        s1 = 0;
+        for j = 1:i-1
+            s1 = s1 + A(i,j)*xg(j);   % use new values
+        end
+        
+        s2 = 0;
+        for j = i+1:n
+            s2 = s2 + A(i,j)*x_old(j); % use old values
+        end
+        
+        xg(i) = (b(i) - s1 - s2) / A(i,i);
+    end
+    
+    % check convergence
+    if abs(xg(1)-x_old(1)) < tol && ...
+       abs(xg(2)-x_old(2)) < tol && ...
+       abs(xg(3)-x_old(3)) < tol && ...
+       abs(xg(4)-x_old(4)) < tol
+        break;
+    end
+end
+
+fprintf('\nGauss-Seidel Solution:\n');
+disp(xg);
+fprintf('Iterations = %d\n', k);
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% --- 4. POWER METHOD (DOMINANT EIGENVALUE) ---
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% Matrix from experiment
+A = [4 1 0;
+     1 20 1;
+     0 1 4];
+
+% Initial guess
+x = [1;1;1];
+
+tol = 1e-3;
+
+for it = 1:500
+    y = A*x;                  % Multiply A by x
+    K = max(abs(y));          % Largest value for scaling
+    x_new = y / K;            % Normalize vector
+    
+    % Convergence check
+    if abs(K - max(abs(A*x_new))) < tol
+        break;
+    end
+    
+    x = x_new;
+end
+
+fprintf('\nPower Method:\n');
+fprintf('Dominant Eigenvalue = %.6f\n', K);
+fprintf('Eigenvector:\n');
+disp(x_new);
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% --- 5. LEAST SQUARES (LINEAR & QUADRATIC FIT) ---
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% Data points
+x = [-2; -1; 0; 1; 2];
+f = [15; 1; 1; 3; 19];
 
 n = length(x);
-y_new = 0;
 
-% Outer loop for summation
-for j = 1:n
-    L = 1;
-    % Inner loop for product
-    for i = 1:n
-        if i ~= j
-            L = L * (x_new - x(i)) / (x(j) - x(i));
-        end
-    end
-    y_new = y_new + y(j) * L;
-end
+% Linear fit y = a + b*x
 
-fprintf('Lagrange Interpolation: At x=%.1f, the interpolated value is %.6f\n', x_new, y_new);
+Sx = sum(x);
+Sy = sum(f);
+Sxx = sum(x.*x);
+Sxy = sum(x.*f);
+
+b = (n*Sxy - Sx*Sy) / (n*Sxx - Sx*Sx);
+a = (Sy - b*Sx)/n;
+
+fprintf('\nLeast Squares (Linear): y = a + b*x\n');
+fprintf('a = %.6f, b = %.6f\n', a, b);
 
 
+%%%%%%%%%%%%%%%%%%%%
+% Quadratic fit y = a + b*x + c*x^2
+%%%%%%%%%%%%%%%%%%%%
 
-% --- Trapezoidal Rule ---
-% Define the function and interval
-f = @(x) x.^2;
-a = 0;
-b = 2;
-n = 100; % Number of subintervals
+Sx2 = sum(x.^2);
+Sx3 = sum(x.^3);
+Sx4 = sum(x.^4);
+SxF = sum(x.*f);
+Sx2F = sum(x.^2 .* f);
 
-h = (b - a) / n;
-sum_val = 0;
+% System of equations for a,b,c:
+M = [n   Sx   Sx2;
+     Sx  Sx2  Sx3;
+     Sx2 Sx3  Sx4];
 
-% Loop to sum intermediate points
-for i = 1:n-1
-    sum_val = sum_val + f(a + i*h);
-end
+R = [Sy; SxF; Sx2F];
 
-% Final calculation
-integral = (h/2) * (f(a) + f(b) + 2*sum_val);
+% Solve using simple Gauss elimination
+Aq = [M R];
+m = 3;
 
-fprintf('Trapezoidal Rule: The integral is approximately %.6f\n', integral);
-
-
-
-% --- Simpson's Rule ---
-% Define the function and interval
-f = @(x) x.^2;
-a = 0;
-b = 2;
-n = 100; % Must be even
-
-h = (b - a) / n;
-sum_val = 0;
-
-% Loop to sum points with correct weights
-for i = 1:n-1
-    x_i = a + i*h;
-    if mod(i, 2) == 1
-        sum_val = sum_val + 4 * f(x_i);
-    else
-        sum_val = sum_val + 2 * f(x_i);
+for j = 1:m-1
+    for i = j+1:m
+        fac = Aq(i,j)/Aq(j,j);
+        Aq(i,:) = Aq(i,:) - fac*Aq(j,:);
     end
 end
 
-% Final calculation
-integral = (h/3) * (f(a) + sum_val + f(b));
+coef = zeros(3,1);
+coef(3) = Aq(3,4)/Aq(3,3);
 
-fprintf('Simpson''s Rule: The integral is approximately %.6f\n', integral);
+for i = 2:-1:1
+    s = 0;
+    for j = i+1:m
+        s = s + Aq(i,j)*coef(j);
+    end
+    coef(i) = (Aq(i,4) - s) / Aq(i,i);
+end
 
-
+fprintf('\nLeast Squares (Quadratic): y = a + b*x + c*x^2\n');
+fprintf('a = %.6f, b = %.6f, c = %.6f\n', coef(1), coef(2), coef(3));
