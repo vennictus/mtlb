@@ -1,232 +1,247 @@
-clc;
-clear all;
+#include <iostream>
+#include <vector>
+#include <cstring>
+using namespace std;
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% --- 1. NEWTON DIVIDED DIFFERENCE INTERPOLATION ---
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+/*
+    =============================
+      GENERAL CPU SCHEDULING TEMPLATE
+    =============================
 
-% Given data points
-x = [0 0.25 0.5 0.75];
-y = [1 1.64872 2.71828 4.4816];
+    This file is a UNIVERSAL BLUEPRINT for:
+        - Preemptive Scheduling
+        - Non-preemptive Scheduling
+        - Ready Queue Logic
+        - Gantt Chart Logging
+        - Computing WT, TAT, RT
+        - ANY algorithm: FCFS, SJF, SRTF, Priority, RR, MWTF
 
-% Point where we want to interpolate
-p = 0.43;
-
-% Number of data points
-n = length(x);
-
-% Create the divided difference table (n x n)
-F = zeros(n,n);
-
-% First column = f(x)
-for i = 1:n
-    F(i,1) = y(i);
-end
-
-% Fill the divided difference table
-for j = 2:n
-    for i = 1:n-j+1
-        F(i,j) = (F(i+1,j-1) - F(i,j-1)) / (x(i+j-1) - x(i));
-    end
-end
-
-% Evaluate Newton polynomial at p
-P = F(1,1);   % Start with first term
-prod = 1;
-
-for k = 2:n
-    prod = prod * (p - x(k-1));
-    P = P + F(1,k) * prod;
-end
-
-fprintf('\nNewton Interpolation: f(0.43) = %.6f\n', P);
+    Replace ONLY the "SELECTION LOGIC" block during exam.
+*/
 
 
+// ========================================================
+// Process structure (common to ALL scheduling algorithms)
+// ========================================================
+class Process {
+public:
+    char pid[10];        // Process ID
+    int arrival;         // Arrival Time
+    int burst;           // Burst Time (original)
+    int remaining;       // Remaining Time (changes during execution)
+    int executed;        // How many time units executed
+    int waiting;         // Dynamic waiting time (if algorithm uses it)
+    int start;           // First time process gets CPU
+    int completion;      // Completion time
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% --- 2. GAUSS ELIMINATION (SIMPLE, NO PIVOTING) ---
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    Process() {
+        strcpy(pid, "");
+        arrival = burst = remaining = executed = waiting = 0;
+        start = -1;
+        completion = 0;
+    }
 
-% Augmented matrix [A|b]
-a = [10 8 -3 1 16;
-     2 10 1 -4 9;
-     3 -4 10 1 10;
-     2 2 -3 10 11];
-
-n = size(a,1);
-
-% Forward elimination
-for j = 1:n-1
-    % eliminate entries below the pivot
-    for i = j+1:n
-        m = a(i,j) / a(j,j);        % multiplier
-        a(i,:) = a(i,:) - m * a(j,:);
-    end
-end
-
-% Back substitution
-x = zeros(n,1);
-x(n) = a(n,n+1) / a(n,n);
-
-for i = n-1:-1:1
-    s = 0;
-    for j = i+1:n
-        s = s + a(i,j) * x(j);
-    end
-    x(i) = (a(i,n+1) - s) / a(i,i);
-end
-
-fprintf('\nGauss Elimination Solution:\n');
-disp(x);
+    Process(const char p[], int at, int bt) {
+        strcpy(pid, p);
+        arrival = at;
+        burst = bt;
+        remaining = bt;
+        executed = waiting = 0;
+        start = -1;
+        completion = 0;
+    }
+};
 
 
+int main() {
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% --- 3. GAUSS–SEIDEL METHOD ---
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    // ============================
+    // Input Section
+    // ============================
+    int n;
+    cout << "Enter number of processes: ";
+    cin >> n;
 
-% Coefficient matrix A and RHS vector b
-A = [10 8 -3 1;
-     2 10 1 -4;
-     3 -4 10 1;
-     2 2 -3 10];
+    Process p[n];
+    for (int i = 0; i < n; i++) {
+        char id[10];
+        int at, bt;
+        cin >> id >> at >> bt;
+        p[i] = Process(id, at, bt);
+    }
 
-b = [16; 9; 10; 11];
+    // ============================
+    // Simulation Variables
+    // ============================
+    int currentTime = 0;
+    int completed = 0;
 
-% Initial guess
-xg = [0;0;0;0];
-n = length(b);
-tol = 1e-5;
+    // Ready queue marker (true = in queue, false = not)
+    bool inReady[n] = {false};
 
-% Iterate
-for k = 1:1000
-    x_old = xg;
-    
-    for i = 1:n
-        s1 = 0;
-        for j = 1:i-1
-            s1 = s1 + A(i,j)*xg(j);   % use new values
-        end
-        
-        s2 = 0;
-        for j = i+1:n
-            s2 = s2 + A(i,j)*x_old(j); % use old values
-        end
-        
-        xg(i) = (b(i) - s1 - s2) / A(i,i);
-    end
-    
-    % check convergence
-    if abs(xg(1)-x_old(1)) < tol && ...
-       abs(xg(2)-x_old(2)) < tol && ...
-       abs(xg(3)-x_old(3)) < tol && ...
-       abs(xg(4)-x_old(4)) < tol
-        break;
-    end
-end
-
-fprintf('\nGauss-Seidel Solution:\n');
-disp(xg);
-fprintf('Iterations = %d\n', k);
+    // Gantt chart
+    vector<string> gantt;
 
 
+    // ======================================================
+    //  MAIN SCHEDULING LOOP (universal for ALL algorithms)
+    // ======================================================
+    while (completed < n) {
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% --- 4. POWER METHOD (DOMINANT EIGENVALUE) ---
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        // -----------------------------------------
+        // STEP 1: Add newly arrived processes
+        // -----------------------------------------
+        for (int i = 0; i < n; i++) {
+            if (p[i].arrival == currentTime && p[i].remaining > 0) {
+                inReady[i] = true;
+            }
+        }
 
-% Matrix from experiment
-A = [4 1 0;
-     1 20 1;
-     0 1 4];
-
-% Initial guess
-x = [1;1;1];
-
-tol = 1e-3;
-
-for it = 1:500
-    y = A*x;                  % Multiply A by x
-    K = max(abs(y));          % Largest value for scaling
-    x_new = y / K;            % Normalize vector
-    
-    % Convergence check
-    if abs(K - max(abs(A*x_new))) < tol
-        break;
-    end
-    
-    x = x_new;
-end
-
-fprintf('\nPower Method:\n');
-fprintf('Dominant Eigenvalue = %.6f\n', K);
-fprintf('Eigenvector:\n');
-disp(x_new);
+        // -----------------------------------------
+        // STEP 2: Update waiting times
+        // NOTE:
+        // For some algorithms (MWTF, Priority variations),
+        // waiting = currentTime - arrival - executed
+        // For others (FCFS, SJF), waiting is computed at end.
+        // -----------------------------------------
+        for (int i = 0; i < n; i++) {
+            if (inReady[i] && p[i].remaining > 0) {
+                p[i].waiting = currentTime - p[i].arrival - p[i].executed;
+            }
+        }
 
 
+        // ======================================================
+        // STEP 3: SELECTION LOGIC (ALGORITHM-DEPENDENT)
+        // YOU REPLACE ONLY THIS BLOCK PER ALGORITHM
+        // ------------------------------------------------------
+        // EXAMPLES:
+        // FCFS → choose ready process with earliest arrival
+        // SJF  → choose ready process with smallest burst
+        // SRTF → choose ready process with smallest remaining
+        // PRIORITY → choose highest/lowest priority
+        // RR → pick next from circular queue
+        // MWTF → choose minimum waiting time
+        // ======================================================
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% --- 5. LEAST SQUARES (LINEAR & QUADRATIC FIT) ---
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        int selected = -1;
 
-% Data points
-x = [-2; -1; 0; 1; 2];
-f = [15; 1; 1; 3; 19];
+        for (int i = 0; i < n; i++) {
+            if (inReady[i] && p[i].remaining > 0) {
 
-n = length(x);
+                if (selected == -1) {
+                    selected = i;
+                }
 
-% Linear fit y = a + b*x
+                // ------------------------------
+                // PLACEHOLDER FOR TIE-BREAK RULES
+                // Modify this depending on algorithm
+                // ------------------------------
+                // Example MWTF rule (replace when needed):
+                /*
+                if (p[i].waiting < p[selected].waiting) {
+                    selected = i;
+                }
+                else if (p[i].waiting == p[selected].waiting) {
+                    if (p[i].arrival < p[selected].arrival) selected = i;
+                    else if (p[i].arrival == p[selected].arrival)
+                        if (strcmp(p[i].pid, p[selected].pid) < 0) selected = i;
+                }
+                */
 
-Sx = sum(x);
-Sy = sum(f);
-Sxx = sum(x.*x);
-Sxy = sum(x.*f);
-
-b = (n*Sxy - Sx*Sy) / (n*Sxx - Sx*Sx);
-a = (Sy - b*Sx)/n;
-
-fprintf('\nLeast Squares (Linear): y = a + b*x\n');
-fprintf('a = %.6f, b = %.6f\n', a, b);
+                // For exam: Replace the above block
+                // with your specific scheduling rule
+            }
+        }
 
 
-%%%%%%%%%%%%%%%%%%%%
-% Quadratic fit y = a + b*x + c*x^2
-%%%%%%%%%%%%%%%%%%%%
+        // -----------------------------------------
+        // STEP 4: CPU Idle Case
+        // -----------------------------------------
+        if (selected == -1) {
+            gantt.push_back("IDLE");
+            currentTime++;
+            continue;
+        }
 
-Sx2 = sum(x.^2);
-Sx3 = sum(x.^3);
-Sx4 = sum(x.^4);
-SxF = sum(x.*f);
-Sx2F = sum(x.^2 .* f);
 
-% System of equations for a,b,c:
-M = [n   Sx   Sx2;
-     Sx  Sx2  Sx3;
-     Sx2 Sx3  Sx4];
+        // -----------------------------------------
+        // STEP 5: First Time CPU Allocation
+        // -----------------------------------------
+        if (p[selected].start == -1) {
+            p[selected].start = currentTime;
+        }
 
-R = [Sy; SxF; Sx2F];
 
-% Solve using simple Gauss elimination
-Aq = [M R];
-m = 3;
+        // Log Gantt Chart
+        gantt.push_back(p[selected].pid);
 
-for j = 1:m-1
-    for i = j+1:m
-        fac = Aq(i,j)/Aq(j,j);
-        Aq(i,:) = Aq(i,:) - fac*Aq(j,:);
-    end
-end
 
-coef = zeros(3,1);
-coef(3) = Aq(3,4)/Aq(3,3);
+        // -----------------------------------------
+        // STEP 6: Execute ONE time unit (Preemptive)
+        // -----------------------------------------
+        p[selected].executed++;
+        p[selected].remaining--;
 
-for i = 2:-1:1
-    s = 0;
-    for j = i+1:m
-        s = s + Aq(i,j)*coef(j);
-    end
-    coef(i) = (Aq(i,4) - s) / Aq(i,i);
-end
 
-fprintf('\nLeast Squares (Quadratic): y = a + b*x + c*x^2\n');
-fprintf('a = %.6f, b = %.6f, c = %.6f\n', coef(1), coef(2), coef(3));
+        // -----------------------------------------
+        // STEP 7: Completion Check
+        // -----------------------------------------
+        if (p[selected].remaining == 0) {
+            p[selected].completion = currentTime + 1;
+            inReady[selected] = false;
+            completed++;
+        }
+
+
+        // -----------------------------------------
+        // STEP 8: Move Simulation Clock
+        // -----------------------------------------
+        currentTime++;
+    }
+
+
+    // ======================================================
+    // FINAL METRIC CALCULATIONS (same for ALL algorithms)
+    // ======================================================
+    cout << "\n\nProcess Table:\n";
+    cout << "PID\tAT\tBT\tST\tCT\tTAT\tWT\tRT\n";
+
+    double totalWT = 0, totalTAT = 0, totalRT = 0;
+
+    for (int i = 0; i < n; i++) {
+
+        int TAT = p[i].completion - p[i].arrival;
+        int WT  = TAT - p[i].burst;
+        int RT  = p[i].start - p[i].arrival;
+
+        totalWT  += WT;
+        totalTAT += TAT;
+        totalRT  += RT;
+
+        cout << p[i].pid << "\t"
+             << p[i].arrival << "\t"
+             << p[i].burst << "\t"
+             << p[i].start << "\t"
+             << p[i].completion << "\t"
+             << TAT << "\t"
+             << WT << "\t"
+             << RT << endl;
+    }
+
+    cout << "\nAverage Waiting Time: "    << totalWT / n;
+    cout << "\nAverage Turnaround Time: " << totalTAT / n;
+    cout << "\nAverage Response Time: "   << totalRT / n;
+
+
+    // ======================================================
+    // PRINT GANTT CHART (same for ALL algorithms)
+    // ======================================================
+    cout << "\n\nGantt Chart:\n0 ";
+    for (auto &g : gantt) {
+        cout << "| " << g << " ";
+    }
+    cout << "| " << gantt.size() << endl;
+
+    return 0;
+}
