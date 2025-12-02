@@ -245,3 +245,212 @@ int main() {
 
     return 0;
 }
+#include <iostream>
+#include <vector>
+#include <iomanip>
+using namespace std;
+
+
+
+
+
+
+/*
+    ================================================================
+      UNIVERSAL PAGE REPLACEMENT TEMPLATE (C++ BLUEPRINT)
+    ================================================================
+
+    This file is a GENERAL skeleton to implement ANY page algorithm:
+
+        → FIFO
+        → LRU
+        → LFU
+        → Optimal
+        → IAR (Inverse Age Replacement)
+        → Random
+        → Custom replacement strategies
+
+    You ONLY modify ONE PART:
+        **THE VICTIM SELECTION LOGIC**
+
+    Everything else stays the same.
+*/
+
+// Frame structure
+struct Frame {
+    int page;           // page number stored
+    int last_access;    // last used time (LRU / IAR)
+    int frequency;      // how many times used (LFU / IAR)
+    int arrival_time;   // when inserted (FIFO)
+
+    Frame() {
+        page = -1;              // empty marker
+        last_access = -1;
+        frequency = 0;
+        arrival_time = -1;
+    }
+};
+
+int main() {
+
+    int F, N;
+    cout << "Enter number of frames: ";
+    cin >> F;
+
+    cout << "Enter number of references: ";
+    cin >> N;
+
+    vector<int> ref(N);
+    cout << "Enter reference string:\n";
+    for (int i = 0; i < N; i++) cin >> ref[i];
+
+    vector<Frame> frames(F);
+
+    int hits = 0, faults = 0;
+
+    cout << "\nRef\tFrames\t\tStatus\n";
+
+    // =====================================================
+    // MAIN LOOP — iterate through reference string
+    // =====================================================
+    for (int t = 0; t < N; t++) {
+
+        int curr = ref[t];
+        bool hit = false;
+
+        // -------------------------------------------------
+        // STEP 1 — CHECK IF PAGE IS ALREADY LOADED (HIT)
+        // -------------------------------------------------
+        for (int i = 0; i < F; i++) {
+            if (frames[i].page == curr) {
+                hit = true;
+                hits++;
+
+                // Update metadata depending on algorithm
+                frames[i].last_access = t; // used by LRU / IAR
+                frames[i].frequency++;     // used by LFU / IAR
+
+                break;
+            }
+        }
+
+        if (hit) {
+            cout << curr << "\t";
+            for (int i = 0; i < F; i++)
+                cout << frames[i].page << " ";
+            cout << "\tHIT\n";
+            continue;
+        }
+
+        // -------------------------------------------------
+        // STEP 2 — FAULT OCCURS
+        // -------------------------------------------------
+        faults++;
+
+        bool inserted = false;
+
+        // Check for free frame first
+        for (int i = 0; i < F; i++) {
+            if (frames[i].page == -1) {
+                frames[i].page = curr;
+                frames[i].last_access = t;
+                frames[i].frequency = 1;
+                frames[i].arrival_time = t;
+
+                inserted = true;
+                break;
+            }
+        }
+
+        // -------------------------------------------------
+        // STEP 3 — NEED REPLACEMENT (Memory Full)
+        // -------------------------------------------------
+        if (!inserted) {
+
+            int victim = -1;
+
+            /*
+                ===================================================
+                        VICTIM SELECTION LOGIC (EDIT THIS)
+                ===================================================
+
+                Examples:
+
+                FIFO:
+                    choose smallest arrival_time
+
+                LRU:
+                    choose smallest last_access
+
+                LFU:
+                    choose smallest frequency
+
+                OPT:
+                    choose page used farthest in future
+
+                IAR:
+                    age = t - last_access
+                    score = age / (1 + frequency)
+                    choose maximum score
+
+                Below is a GENERAL FORM:
+
+                    compute "score" for each frame
+                    choose frame with best score
+
+                YOU WILL MODIFY THIS PART IN THE EXAM.
+            */
+
+            double bestScore = -1e18;   // very small number
+
+            for (int i = 0; i < F; i++) {
+
+                // --------------------------------------------
+                // DEFAULT: score = 0 (YOU CHANGE THIS)
+                // --------------------------------------------
+                double score = 0;
+
+                // Example IAR (commented):
+                /*
+                double age = t - frames[i].last_access;
+                score = age / (1 + frames[i].frequency);
+                */
+
+                // choose victim with highest score
+                if (score > bestScore) {
+                    bestScore = score;
+                    victim = i;
+                }
+            }
+
+            // --------------------------------------------
+            // REPLACE THE VICTIM
+            // --------------------------------------------
+            frames[victim].page = curr;
+            frames[victim].last_access = t;
+            frames[victim].frequency = 1;
+            frames[victim].arrival_time = t;
+        }
+
+        // -------------------------------------------------
+        // STEP 4 — PRINT MEMORY STATE AFTER THIS REFERENCE
+        // -------------------------------------------------
+        cout << curr << "\t";
+        for (int i = 0; i < F; i++)
+            cout << frames[i].page << " ";
+        cout << "\tFAULT\n";
+    }
+
+
+    // =====================================================
+    // FINAL STATISTICS
+    // =====================================================
+    cout << "\nTotal Hits : " << hits;
+    cout << "\nTotal Faults : " << faults;
+    cout << "\nHit Ratio : " << fixed << setprecision(2) 
+         << (float)hits / N;
+    cout << "\nFault Ratio : " << fixed << setprecision(2) 
+         << (float)faults / N << "\n";
+
+    return 0;
+}
